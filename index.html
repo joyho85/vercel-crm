@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>智慧顧客管理｜客戶資料填寫</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>顧客資料填寫</h1>
+    <form id="customerForm" class="card">
+      <label>姓名<input name="name" required /></label>
+      <label>出生年月日<input name="birthdate" type="date" required /></label>
+      <label>電話<input name="phone" type="tel" required /></label>
+      <label>地址<input name="address" required /></label>
+      <label>Email<input name="email" type="email" required /></label>
+      <button type="submit">送出</button>
+      <small id="msg"></small>
+    </form>
+  </main>
+<script>
+const form = document.getElementById('customerForm');
+const msg = document.getElementById('msg');
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  msg.textContent = "送出中...";
+  const data = Object.fromEntries(new FormData(form).entries());
+  const res = await fetch('/api/submit-customer', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+  if(res.ok){
+    window.location.href = '/thanks.html';
+  }else{
+    const t = await res.text();
+    msg.textContent = '送出失敗：' + t;
+  }
+});
+</script>
+</body>
+</html>

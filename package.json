@@ -1,0 +1,14 @@
+{
+  "name": "vercel-smart-crm",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev",
+    "build": "echo Nothing to build",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@vercel/kv": "0.2.4"
+  }
+}

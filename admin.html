@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>智慧顧客管理｜後台</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>後台管理</h1>
+    <div class="card">
+      <div class="badge">
+        <strong>登入</strong>
+        <small>輸入管理密碼（環境變數 ADMIN_KEY）</small>
+      </div>
+      <div class="card-row">
+        <input id="adminKey" placeholder="請輸入管理密碼">
+        <button id="loginBtn">登入</button>
+      </div>
+      <small id="authMsg"></small>
+    </div>
+
+    <section class="card hidden" id="dashboard">
+      <div class="toolbar">
+        <button id="refresh">重新整理資料</button>
+        <button id="exportCustomers">匯出客戶CSV</button>
+        <button id="exportPurchases">匯出購買CSV</button>
+        <button id="aiAnalyze">AI 分析</button>
+      </div>
+      <div class="badge"><strong>新增購買紀錄</strong></div>
+      <div class="card-row">
+        <input id="p_name" placeholder="顧客姓名 (需與表單一致)" />
+        <input id="p_time" type="datetime-local" />
+      </div>
+      <div class="card-row">
+        <input id="p_item" placeholder="商品名稱"/>
+        <input id="p_price" type="number" placeholder="價格 (TWD)"/>
+      </div>
+      <button id="addPurchase">新增</button>
+      <small id="purchaseMsg"></small>
+
+      <h2>客戶列表</h2>
+      <table class="table" id="customersTable">
+        <thead><tr><th>姓名</th><th>生日</th><th>電話</th><th>Email</th><th>地址</th><th>建立時間</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h2>購買紀錄</h2>
+      <table class="table" id="purchasesTable">
+        <thead><tr><th>姓名</th><th>時間</th><th>商品</th><th>價格</th><th>建立時間</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+<script>
+const $ = (s)=>document.querySelector(s);
+const adminKeyInput = $("#adminKey");
+const loginBtn = $("#loginBtn");
+const msg = $("#authMsg");
+const dash = $("#dashboard");
+const headers = ()=>({ "x-admin-key": sessionStorage.getItem("ADMIN_KEY") || "" });
+
+loginBtn.onclick = async ()=>{
+  loginBtn.disabled = true; loginBtn.textContent = "登入中...";
+  const key = adminKeyInput.value.trim();
+  if(!key){ msg.textContent = "請輸入密碼"; loginBtn.disabled=false; loginBtn.textContent="登入"; return; }
+  try{
+    const r = await fetch("/api/health",{headers:{"x-admin-key":key}});
+    if(r.ok){
+      sessionStorage.setItem("ADMIN_KEY", key);
+      msg.textContent = "登入成功";
+      dash.classList.remove("hidden");
+      loadAll();
+    }else{
+      msg.textContent = "登入失敗（環境變數未設定或函式錯誤）。";
+    }
+  }catch(e){
+    msg.textContent = "無法連線：" + e.message;
+  }finally{
+    loginBtn.disabled=false; loginBtn.textContent="登入";
+  }
+};
+
+async function loadAll(){ await Promise.all([loadCustomers(), loadPurchases()]); }
+async function loadCustomers(){
+  const r = await fetch("/api/list?type=customers",{headers:headers()});
+  const data = await r.json();
+  const tbody = $("#customersTable tbody");
+  tbody.innerHTML = "";
+  data.items.forEach(s=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = \`<td>\${s.name||""}</td>
+                     <td>\${s.birthdate||""}</td>
+                     <td>\${s.phone||""}</td>
+                     <td>\${s.email||""}</td>
+                     <td>\${s.address||""}</td>
+                     <td>\${new Date(s.created_at).toLocaleString()}</td>\`;
+    tbody.appendChild(tr);
+  });
+  window.__customers = data.items;
+}
+async function loadPurchases(){
+  const r = await fetch("/api/list?type=purchases",{headers:headers()});
+  const data = await r.json();
+  const tbody = $("#purchasesTable tbody");
+  tbody.innerHTML = "";
+  data.items.forEach(s=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = \`<td>\${s.name||""}</td>
+                     <td>\${s.time||""}</td>
+                     <td>\${s.item||""}</td>
+                     <td>\${s.price||""}</td>
+                     <td>\${new Date(s.created_at).toLocaleString()}</td>\`;
+    tbody.appendChild(tr);
+  });
+  window.__purchases = data.items;
+}
+$("#refresh").onclick = loadAll;
+function toCSVRows(items, cols) {
+  const esc = (v)=>('"' + String(v ?? "").replaceAll('"','""') + '"');
+  const header = cols.map(c=>esc(c.label)).join(",");
+  const lines = items.map(it => cols.map(c=>esc(c.get(it))).join(","));
+  return [header, ...lines].join("\n");
+}
+document.getElementById("exportCustomers").onclick = ()=>{
+  const cols = [
+    {label:"姓名", get:(s)=>s.name},
+    {label:"生日", get:(s)=>s.birthdate},
+    {label:"電話", get:(s)=>s.phone},
+    {label:"Email", get:(s)=>s.email},
+    {label:"地址", get:(s)=>s.address},
+    {label:"建立時間", get:(s)=>s.created_at},
+  ];
+  const csv = toCSVRows(window.__customers||[], cols);
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "customers.csv"; a.click();
+  URL.revokeObjectURL(url);
+};
+document.getElementById("exportPurchases").onclick = ()=>{
+  const cols = [
+    {label:"姓名", get:(s)=>s.name},
+    {label:"時間", get:(s)=>s.time},
+    {label:"商品", get:(s)=>s.item},
+    {label:"價格", get:(s)=>s.price},
+    {label:"建立時間", get:(s)=>s.created_at},
+  ];
+  const csv = toCSVRows(window.__purchases||[], cols);
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "purchases.csv"; a.click();
+  URL.revokeObjectURL(url);
+};
+document.getElementById("aiAnalyze").onclick = async ()=>{
+  const r = await fetch("/api/analyze", {headers:headers()});
+  const data = await r.json();
+  alert("AI（簡易規則）分析報告\n\n"+data.report);
+};
+document.getElementById("addPurchase").onclick = async ()=>{
+  const name = document.getElementById("p_name").value.trim();
+  const time = document.getElementById("p_time").value;
+  const item = document.getElementById("p_item").value.trim();
+  const price = document.getElementById("p_price").value;
+  if(!name || !time || !item || !price){ 
+    document.getElementById("purchaseMsg").textContent = "請完整填寫"; return; 
+  }
+  const res = await fetch("/api/purchase-add", {
+    method:"POST",
+    headers:{...headers(), "Content-Type":"application/json"},
+    body: JSON.stringify({name,time,item,price})
+  });
+  if(res.ok){
+    document.getElementById("purchaseMsg").textContent = "已新增！";
+    document.getElementById("p_name").value = "";
+    document.getElementById("p_time").value = "";
+    document.getElementById("p_item").value = "";
+    document.getElementById("p_price").value = "";
+    loadPurchases();
+  }else{
+    document.getElementById("purchaseMsg").textContent = "新增失敗";
+  }
+};
+</script>
+</body>
+</html>
